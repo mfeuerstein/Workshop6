@@ -6,6 +6,9 @@ var express = require('express');
 // Creates an Express server.
 var app = express();
 
+// You run the server from `server`, so `../client/build` is `server/../client/build`.
+// '..' means "go up one directory", so this translates into `client/build`!
+app.use(express.static('../client/build'));
 
 var bodyParser = require('body-parser');
 app.use(bodyParser.text());
