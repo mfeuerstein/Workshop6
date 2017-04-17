@@ -1,16 +1,5 @@
-import {readDocument, writeDocument} from './database.js';
 
 var token = 'eyJpZCI6NH0='; // <-- Put your base64'd JSON token here
-
-/**
- * Emulates how a REST call is *asynchronous* -- it calls your function back
- * some time in the future with data.
- */
-function emulateServerReturn(data, cb) {
-  setTimeout(() => {
-    cb(data);
-  }, 4);
-}
 
 /**
  * Emulates a REST call to get the feed data for a particular user.
@@ -43,18 +32,13 @@ function emulateServerReturn(data, cb) {
  /**
   * Adds a new comment to the database on the given feed item.
   */
- export function postComment(feedItemId, author, contents, cb) {
-   sendXHR('POST', '/feeditem', {
-     feedItemId: feedItemId,
-     author: author,
-     contents: contents,
-     postDate: new Date().getTime(),
-     likeCounter: []
-   }, (xhr) => {
-     // Return the new status update.
-     cb(JSON.parse(xhr.responseText));
-   });
- }
+  export function postComment(feedItemId, author, contents, cb) {
+    sendXHR('POST','/feeditem/'+feedItemId+'/commentThread/comment',{
+      author: author,
+      contents: contents
+    },
+    (xhr)=>{cb(JSON.parse(xhr.responseText));});
+  }
 
  /**
   * Updates a feed item's likeCounter by adding the user to the likeCounter.
@@ -79,32 +63,25 @@ function emulateServerReturn(data, cb) {
    });
  }
 
-/**
- * Adds a 'like' to a comment.
- */
-export function likeComment(feedItemId, commentIdx, userId, cb) {
-  var feedItem = readDocument('feedItems', feedItemId);
-  var comment = feedItem.comments[commentIdx];
-  comment.likeCounter.push(userId);
-  writeDocument('feedItems', feedItem);
-  comment.author = readDocument('users', comment.author);
-  emulateServerReturn(comment, cb);
-}
+ /**
+  * Adds a 'like' to a comment.
+  */
+  export function likeComment(feedItemId, commentIdx, userId, cb) {
+     sendXHR('PUT','/feeditem/'+feedItemId+'/commentThread/comment/'+commentIdx+'/likelist/'+userId,undefined,
+      (xhr)=>{
+        cb(JSON.parse(xhr.responseText));
+      });
+    }
 
-/**
- * Removes a 'like' from a comment.
- */
-export function unlikeComment(feedItemId, commentIdx, userId, cb) {
-  var feedItem = readDocument('feedItems', feedItemId);
-  var comment = feedItem.comments[commentIdx];
-  var userIndex = comment.likeCounter.indexOf(userId);
-  if (userIndex !== -1) {
-    comment.likeCounter.splice(userIndex, 1);
-    writeDocument('feedItems', feedItem);
+ /**
+  * Removes a 'like' from a comment.
+  */
+  export function unlikeComment(feedItemId, commentIdx, userId, cb) {
+    sendXHR('DELETE','/feeditem/'+feedItemId+'/commentThread/comment/'+commentIdx+'/likelist/'+userId,undefined,
+     (xhr)=>{
+       cb(JSON.parse(xhr.responseText));
+     });
   }
-  comment.author = readDocument('users', comment.author);
-  emulateServerReturn(comment, cb);
-}
 
 /**
  * Updates the text in a feed item (assumes a status update)

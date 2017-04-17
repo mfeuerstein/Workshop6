@@ -1,10 +1,12 @@
 //var util = require('./util.js');
 var database = require('./database');
 var StatusUpdateSchema = require('./schemas/statusupdate.json');
+var commentSchema = require('./schemas/comment.json');
 var validate = require('express-jsonschema').validate;
 var readDocument = database.readDocument;
 var writeDocument = database.writeDocument;
 var addDocument = database.addDocument;
+
 // Imports the express Node module.
 var express = require('express');
 var bodyParser = require('body-parser');
@@ -137,6 +139,26 @@ function postStatusUpdate(user, location, contents) {
   return newStatusUpdate;
 }
 
+/**
+ * Adds a new status update to the database.
+ */
+function postComment(feedItemId, author, contents) {
+
+  // Get the current UNIX time.
+  var time = new Date().getTime();
+
+  var feedItem = readDocument('feedItems', feedItemId);
+  feedItem.comments.push({
+    "author": author,
+    "contents": contents,
+    "postDate": time,
+    "likeCounter": []
+  });
+  writeDocument('feedItems', feedItem);
+  // Return the newly-posted object.
+  return getFeedItemSync(feedItemId);
+}
+
 // `POST /feeditem { userId: user, location: location, contents: contents  }`
 app.post('/feeditem',
          validate({ body: StatusUpdateSchema }), function(req, res) {
@@ -160,28 +182,60 @@ app.post('/feeditem',
   }
 });
 
-
-// `POST /comment
-app.post('/comment',
-         validate({ body: StatusUpdateSchema }), function(req, res) {
-  // If this function runs, `req.body` passed JSON validation!
+app.post('/feeditem/:feeditemid/commentThread/comment',validate({ body: commentSchema}),function(req,res){
   var body = req.body;
   var fromUser = getUserIdFromToken(req.get('Authorization'));
-
-  // Check if requester is authorized to post this status update.
-  // (The requester must be the author of the update.)
-  if (fromUser === body.comment) {
-    var comment = postStatusUpdate(body.feedItemId, body.author, body.contents,
-	body.postDate, body.likeCounter);
-    // When POST creates a new resource, we should tell the client about it
-    // in the 'Location' header and use status code 201.
+  var feedItemId = req.params.feeditemid;
+  if (fromUser === body.author) {
+    var newPost = postComment(feedItemId, body.author, body.contents);
     res.status(201);
-    res.set('Location', '/comment/' + comment._id);
-     // Send the update!
+    res.set('Location', '/feeditem/' + newPost._id);
+    res.send(newPost);
+  }
+  else{
+    res.send(401).end();
+  }
+});
+
+app.put('/feeditem/:feeditemid/commentThread/comment/:commentIdx/likelist/:userId',function(req,res){
+  var fromUser = getUserIdFromToken(req.get('Authorization'));
+  var feedItemId = parseInt(req.params.feeditemid,10);
+  var commentIdx = parseInt(req.params.commentIdx,10);
+  var userId = parseInt(req.params.userId,10);
+  if(fromUser === userId){
+    var feedItem = readDocument('feedItems', feedItemId);
+    var comment = feedItem.comments[commentIdx];
+    if(comment.likeCounter.indexOf(userId)===-1){
+      comment.likeCounter.push(userId);
+    }
+    writeDocument('feedItems', feedItem);
+    comment.author = readDocument('users', comment.author);
+    res.status(201);
     res.send(comment);
-  } else {
-    // 401: Unauthorized.
-    res.status(401).end();
+  }else{
+    res.send(401).end();
+  }
+
+});
+
+app.delete('/feeditem/:feeditemid/commentThread/comment/:commentIdx/likelist/:userId',function(req,res){
+  var fromUser = getUserIdFromToken(req.get('Authorization'));
+  var feedItemId = parseInt(req.params.feeditemid,10);
+  var commentIdx = parseInt(req.params.commentIdx,10);
+  var userId = parseInt(req.params.userId,10);
+  if(fromUser === userId){
+    var feedItem = readDocument('feedItems', feedItemId);
+    var comment = feedItem.comments[commentIdx];
+    var index = comment.likeCounter.indexOf(userId);
+    if(index!==-1){
+      comment.likeCounter.splice(index,1);
+    }
+    writeDocument('feedItems', feedItem);
+    comment.author = readDocument('users', comment.author);
+    res.status(201);
+    res.send(comment);
+  }else{
+   res.send(401).end();
   }
 });
 
